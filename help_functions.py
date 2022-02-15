@@ -1,6 +1,4 @@
 import re
-import scipy.stats as st
-import plotly.express as px
 import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline, make_pipeline
@@ -12,73 +10,6 @@ from sklearn.preprocessing import (
     OrdinalEncoder,
     StandardScaler,
 )
-import scipy
-
-def to_object(x):
-    return pd.DataFrame(x).astype(str)
-
-def to_number(x):
-    return pd.DataFrame(x).astype(float)
-
-def get_ci_model_from_clf(clf):
-    
-    params=[]
-    for k,v in clf.cv_results_.items():
-
-        if k=="params" and type(v)==list:
-          #  print(k,v)
-            for p in v:
-               # print(p)
-                z=[]
-                for d,e in p.items():
-                    z.append(str(d)+"="+str(e))
-                #    print(d,e)
-                params.append("|".join(z))
-    #print(params)
-
-    param_train_score={str(d):[] for d in  params}
-    pattern="split\d{1,2}_\S+"
-    for k,v in clf.cv_results_.items():
-        if re.match(pattern,k):
-            for idx,para in enumerate(param_train_score):
-                param_train_score[para].append(v[idx])
-    train_score_ci={k:st.norm.interval(alpha=0.95, loc=np.mean(v), scale=scipy.stats.sem(v)) for k,v in param_train_score.items()}
-    return train_score_ci 
-
-
-def plot_error_bar(ci_rf):
-    def color_statistical_sig(x,max_val):
-        plus=x["plus"]
-       # print(minus,plus,max_val)
-        if plus>=max_val:
-            #print("---",plus,max_val)
-            return "not sig"
-        return "sig"
-    
-    ff=pd.DataFrame(ci_rf)
-    fft=ff.transpose()
-    fft.columns=["minus","plus"]
-    fft["mean"]=fft.apply(np.mean,axis=1)
-    fft["e_plus"]=fft["plus"]-fft["mean"]
-    fft["e_minus"]=fft["mean"]-fft["minus"]
-    max_val=fft["plus"].max()
-   # print(max_val)
-    min_val=fft[fft["minus"]>0]["minus"].min()
-    
-    min_plus_idx=fft[fft["plus"]>0]["plus"].idxmax()
-    min_plus=fft.loc[min_plus_idx,"minus"]
-    #tt.loc['criterion=gini|min_samples_split=20']["minus"]
-  #  print(min_plus)
-    fft["max"]=fft["plus"].apply(lambda x: "max" if x==max_val else "not max" )
-    fft["significant"]=fft.apply(lambda x: color_statistical_sig(x,max_val=min_plus),axis=1)
-   # print(fft)
-    fft["hover_data"]=round(fft["minus"],4).astype(str)+" +- "+round(fft["plus"],4).astype(str)
-    #print(fft["hover_data"])
-    fig = px.scatter(fft, x=fft.index,y="mean",  error_y="e_plus", error_y_minus="e_minus",color="significant",symbol="max",hover_data=["hover_data"])
-    fig.update(layout_yaxis_range = [min_val-0.1,max_val+0.1])
-
-    fig.show()
-    return fft
     
     
 def transfrom_array_to_df_onehot(pl,nparray,onehot=True,overal_imp=False):
