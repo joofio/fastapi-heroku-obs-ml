@@ -116,6 +116,17 @@ class PredictionProba(BaseModel):
     feature_importance: FeatureImportance = {}
     timestamp: datetime.date
 
+class DecisionType(str,Enum):
+    green="Ok"
+    yellow="Possible Problem"
+    red="Warning"
+
+class Decision(BaseModel):
+    model: str
+    result_reality: str
+    feature_importance: FeatureImportance = {}
+    timestamp: datetime.date
+    decision: DecisionType
 
 
 class TrabalhoPartoNoParto(str,Enum):
@@ -149,6 +160,10 @@ class ApresentacaoParto(str,Enum):
 
 class BinSim(str,Enum):
     yes="S"
+
+class TipoParto(str,Enum):
+    ces="Cesariana"
+    vag="Vaginal"
 
 class Features(BaseModel):
     IDADE_MATERNA: int
@@ -200,6 +215,61 @@ class Features(BaseModel):
     )
     TRAB_PARTO_NO_PARTO: TrabalhoPartoNoParto  = Field(
         "Espontâneo", title="The description of the item"
+    )
+
+class FeaturesWithDelivery(BaseModel):
+    IDADE_MATERNA: int
+    PESO_INICIAL: float
+    IMC: float
+    NUMERO_CONSULTAS_PRE_NATAL: int
+    PESO_ADMISSAO_INTERNAMENTO: float
+    ESTIMATIVA_PESO_ECO_30: float
+    ESTIMATIVA_PESO_ECO_32: float
+    ESTIMATIVA_PESO_ECO_33: float
+    ESTIMATIVA_PESO_ECO_34: float
+    ESTIMATIVA_PESO_ECO_35: float
+    ESTIMATIVA_PESO_ECO_36: float
+    ESTIMATIVA_PESO_ECO_38: float
+    ESTIMATIVA_PESO_ECO_39: float
+    ESTIMATIVA_PESO_ECO_40: float
+    ESTIMATIVA_PESO_ECO_41: float
+    EUTOCITO_ANTERIOR: int
+    CESARIANAS_ANTERIOR: int
+    BISHOP_SCORE: BishopScore = Field(
+        0, title="The description of the item", 
+    )
+    BISHOP_DILATACAO: BishopDilatacao  = Field(
+        0, title="The description of the item", 
+    )
+    BISHOP_EXTINCAO: BishopExtincao  = Field(
+        0, title="The description of the item", 
+    )
+    APRESENTACAO_NO_PARTO: ApresentacaoParto  = Field(
+        "Pélvica", title="The description of the item", 
+    )
+    HIPERTENSAO_CRONICA: BinX  = Field(
+        "X", title="The description of the item", 
+    )
+    BACIA: Bacia  = Field(
+        "L", title="The description of the item", 
+    )
+    GRUPO_ROBSON: GrupoRobson  = Field(
+        "1.0", title="The description of the item",
+    )
+    APRESENTACAO_ADMISSAO: ApresentacaoAdmissao  = Field(
+        "apr.cefala.3", title="The description of the item", 
+    )
+    TRAB_PARTO_ENTRADA_ESPONTANEO: BinSim  = Field(
+        "S", title="The description of the item", 
+    )
+    HIPERTENSAO_PRE_ECLAMPSIA: BinX  = Field(
+        "X", title="The description of the item", 
+    )
+    TRAB_PARTO_NO_PARTO: TrabalhoPartoNoParto  = Field(
+        "Espontâneo", title="The description of the item"
+    )
+    TIPO_PARTO: TipoParto  = Field(
+        "Cesariana", title="The description of the item"
     )
 
 app = FastAPI()
@@ -288,4 +358,27 @@ async def get_predict_proba(row: Features):
     outcome=create_outcome(pred_proba,ENC)
     print(outcome)
     resp={"model":"DecisionTree","result":result,"outcome":outcome,"timestamp":datetime.datetime.now()}
+    return resp
+
+@app.post("/decision",response_model=Decision)
+async def get_decision(row: FeaturesWithDelivery):
+    tipo_parto=row.TIPO_PARTO
+    delattr(row,"TIPO_PARTO")
+    X_new=preprocess_row(row,pipeline)
+    level="Ok"
+    testing=loaded_model.predict(X_new.values)
+    pred_proba=loaded_model.predict_proba(X_new.values)
+    result=create_result(pred_proba,THRESHOLD,ENC)
+   # print(testing)
+
+    if ENC[testing[0]]!=result:
+        print("EEEERRRRORRR")
+    if tipo_parto=="Cesariana" and result=="Vaginal":
+        if pred_proba[0][0]<0.2:
+            level="Warning"
+        elif pred_proba[0][0]>=0.2 and pred_proba[0][0]<THRESHOLD:
+            level="Possible Problem"
+  
+
+    resp={"model":"DecisionTree","result_reality":tipo_parto,"timestamp":datetime.datetime.now(),"decision":level}
     return resp
